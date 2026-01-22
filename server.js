@@ -35,12 +35,17 @@ app.post("/render", async (req, res) => {
   const page = await context.newPage();
 
   try {
+    // Wstrzyknięcie danych PRZED załadowaniem HTML
     await page.addInitScript((data) => {
       window.__RENDER_REQUEST__ = data;
     }, rr);
 
     await page.setContent(TEMPLATE_HTML, { waitUntil: "domcontentloaded" });
 
+    // Poczekaj aż template skończy wstawiać treści (ustawia window.__RENDERED__ = true)
+    await page.waitForFunction(() => window.__RENDERED__ === true, null, { timeout: 8000 });
+
+    // Fonts ready (best effort)
     await page.evaluate(async () => {
       if (document.fonts?.ready) await document.fonts.ready;
     });
@@ -51,10 +56,13 @@ app.post("/render", async (req, res) => {
     res.setHeader("Content-Type", "image/png");
     res.status(200).send(png);
   } catch (e) {
-    res.status(500).json({ error: "Render failed" });
+    res.status(500).json({
+      error: "Render failed",
+      message: String(e?.message || e)
+    });
   } finally {
-    await page.close();
-    await context.close();
+    await page.close().catch(() => {});
+    await context.close().catch(() => {});
   }
 });
 
