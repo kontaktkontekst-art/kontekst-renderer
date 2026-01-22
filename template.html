@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body { margin:0; padding:0; }
+    body { background:#fff; }
+
+    #canvas {
+      position: relative;
+      width: 1080px;
+      height: 1350px;
+      background: #F6F3EE;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+
+    .bg {
+      position:absolute;
+      inset:0;
+      background-size:cover;
+      background-position:center;
+      filter: brightness(0.6);
+    }
+
+    .content {
+      position:absolute;
+      inset:0;
+      padding:96px 84px;
+      display:flex;
+      flex-direction:column;
+      justify-content:flex-start;
+    }
+
+    h1 {
+      font-size:84px;
+      line-height:92px;
+      margin:0;
+      color:#111;
+      max-width:900px;
+    }
+
+    .footer {
+      position:absolute;
+      bottom:40px;
+      left:84px;
+      right:84px;
+      display:flex;
+      justify-content:space-between;
+      font-size:22px;
+      color:#111;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas">
+    <div id="bg" class="bg"></div>
+
+    <div class="content">
+      <h1 id="headline"></h1>
+    </div>
+
+    <div class="footer">
+      <div id="brand"></div>
+      <div id="counter"></div>
+    </div>
+  </div>
+
+  <script>
+    const rr = window.__RENDER_REQUEST__;
+
+    // headline
+    document.getElementById("headline").textContent = rr.slots_fill.headline;
+
+    // background image (jeśli jest)
+    if (rr.slots_fill.background_image?.url) {
+      document.getElementById("bg").style.backgroundImage =
+        `url("${rr.slots_fill.background_image.url}")`;
+    }
+
+    // brand
+    document.getElementById("brand").textContent =
+      rr.brand_lockup?.handle_text || "";
+
+    // counter
+    document.getElementById("counter").textContent =
+      `${rr.slide}/${rr.total}`;
+  </script>
+</body>
+</html>
