@@ -67,41 +67,44 @@
   </div>
 
   <script>
-    // Zasada: NIGDY nie zostawiamy renderera w "wiszącym" stanie.
-    // Zawsze ustawiamy albo __RENDERED__=true, albo __RENDER_ERROR__.
-
     window.__RENDERED__ = false;
     window.__RENDER_ERROR__ = "";
 
+    function readRenderRequest() {
+      const el = document.getElementById("__RR__");
+      if (!el) return null;
+      try {
+        return JSON.parse(el.textContent || "");
+      } catch (e) {
+        console.error("Failed to parse __RR__ JSON", e);
+        return null;
+      }
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
       try {
-        const rr = window.__RENDER_REQUEST__;
+        const rr = readRenderRequest();
         if (!rr) {
-          console.error("Missing __RENDER_REQUEST__");
-          window.__RENDER_ERROR__ = "Missing __RENDER_REQUEST__";
+          console.error("Missing/invalid RenderRequest (__RR__)");
+          window.__RENDER_ERROR__ = "Missing/invalid RenderRequest (__RR__)";
           window.__RENDERED__ = true;
           return;
         }
 
-        // headline
         document.getElementById("headline").textContent =
           rr.slots_fill?.headline || "";
 
-        // background image (jeśli jest)
         if (rr.slots_fill?.background_image?.url) {
           document.getElementById("bg").style.backgroundImage =
             `url("${rr.slots_fill.background_image.url}")`;
         }
 
-        // brand
         document.getElementById("brand").textContent =
           rr.brand_lockup?.handle_text || "";
 
-        // counter
         document.getElementById("counter").textContent =
           `${rr.slide}/${rr.total}`;
 
-        // ✅ GOTOWE
         window.__RENDERED__ = true;
       } catch (err) {
         console.error("Template exception", err);
