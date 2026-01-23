@@ -67,34 +67,47 @@
   </div>
 
   <script>
-    // Poczekaj aż DOM będzie gotowy
+    // Zasada: NIGDY nie zostawiamy renderera w "wiszącym" stanie.
+    // Zawsze ustawiamy albo __RENDERED__=true, albo __RENDER_ERROR__.
+
+    window.__RENDERED__ = false;
+    window.__RENDER_ERROR__ = "";
+
     window.addEventListener("DOMContentLoaded", () => {
-      const rr = window.__RENDER_REQUEST__;
-      if (!rr) {
-        console.error("Missing __RENDER_REQUEST__");
-        return;
+      try {
+        const rr = window.__RENDER_REQUEST__;
+        if (!rr) {
+          console.error("Missing __RENDER_REQUEST__");
+          window.__RENDER_ERROR__ = "Missing __RENDER_REQUEST__";
+          window.__RENDERED__ = true;
+          return;
+        }
+
+        // headline
+        document.getElementById("headline").textContent =
+          rr.slots_fill?.headline || "";
+
+        // background image (jeśli jest)
+        if (rr.slots_fill?.background_image?.url) {
+          document.getElementById("bg").style.backgroundImage =
+            `url("${rr.slots_fill.background_image.url}")`;
+        }
+
+        // brand
+        document.getElementById("brand").textContent =
+          rr.brand_lockup?.handle_text || "";
+
+        // counter
+        document.getElementById("counter").textContent =
+          `${rr.slide}/${rr.total}`;
+
+        // ✅ GOTOWE
+        window.__RENDERED__ = true;
+      } catch (err) {
+        console.error("Template exception", err);
+        window.__RENDER_ERROR__ = String(err?.message || err);
+        window.__RENDERED__ = true;
       }
-
-      // headline
-      document.getElementById("headline").textContent =
-        rr.slots_fill?.headline || "";
-
-      // background image (jeśli jest)
-      if (rr.slots_fill?.background_image?.url) {
-        document.getElementById("bg").style.backgroundImage =
-          `url("${rr.slots_fill.background_image.url}")`;
-      }
-
-      // brand
-      document.getElementById("brand").textContent =
-        rr.brand_lockup?.handle_text || "";
-
-      // counter
-      document.getElementById("counter").textContent =
-        `${rr.slide}/${rr.total}`;
-
-      // 🔑 SYGNAŁ DLA RENDERERA: STRONA GOTOWA
-      window.__RENDERED__ = true;
     });
   </script>
 </body>
