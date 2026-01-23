@@ -34,7 +34,6 @@ app.post("/render", async (req, res) => {
   });
   const page = await context.newPage();
 
-  // Zbieramy logi z przeglądarki, żeby 500 było diagnostyczne
   const browserLogs = [];
   const pushLog = (type, msg) => {
     const line = `[${type}] ${msg}`;
@@ -42,45 +41,33 @@ app.post("/render", async (req, res) => {
     if (browserLogs.length > 200) browserLogs.shift();
   };
 
-  page.on("console", (msg) => {
-    pushLog(`console.${msg.type()}`, msg.text());
-  });
-  page.on("pageerror", (err) => {
-    pushLog("pageerror", err?.stack || String(err));
-  });
-  page.on("requestfailed", (req) => {
-    pushLog("requestfailed", `${req.method()} ${req.url()} -> ${req.failure()?.errorText || "unknown"}`);
-  });
+  page.on("console", (msg) => pushLog(`console.${msg.type()}`, msg.text()));
+  page.on("pageerror", (err) => pushLog("pageerror", err?.stack || String(err)));
+  page.on("requestfailed", (req) =>
+    pushLog("requestfailed", `${req.method()} ${req.url()} -> ${req.failure()?.errorText || "unknown"}`)
+  );
 
   try {
-    // 1) Wstrzyknięcie danych NAJWPROSTSZĄ metodą (bez structured-clone)
-    //    dzięki temu nie ma ryzyka, że addInitScript z argumentem coś „zgubi”.
     await page.addInitScript({
       content: `window.__RENDER_REQUEST__ = ${JSON.stringify(rr)};`,
     });
 
     await page.setContent(TEMPLATE_HTML, { waitUntil: "domcontentloaded" });
 
-    // 2) Czekamy aż template zasygnalizuje: OK albo ERROR
     await page.waitForFunction(
       () => window.__RENDERED__ === true || (typeof window.__RENDER_ERROR__ === "string" && window.__RENDER_ERROR__.length > 0),
       null,
       { timeout: 8000 }
     );
 
-    // 3) Jeśli template zgłosił błąd — przerywamy z czytelnym komunikatem
     const renderError = await page.evaluate(() => window.__RENDER_ERROR__ || "");
-    if (renderError) {
-      throw new Error(`TemplateError: ${renderError}`);
-    }
+    if (renderError) throw new Error(`TemplateError: ${renderError}`);
 
-    // Fonts ready (best effort)
     await page.evaluate(async () => {
       if (document.fonts?.ready) await document.fonts.ready;
     });
 
-    const canvas = page.locator("#canvas");
-    const png = await canvas.screenshot({ type: "png" });
+    const png = await page.locator("#canvas").screenshot({ type: "png" });
 
     res.setHeader("Content-Type", "image/png");
     res.status(200).send(png);
@@ -96,7 +83,10 @@ app.post("/render", async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Renderer running on port ${PORT}`);
+// ✅ KLUCZ: Render musi widzieć port z env PORT
+const PORT = Number(process.env.PORT || 10000);
+
+// NIE podajemy hosta — minimalizujemy ryzyko złego bindu
+app.listen(PORT, () => {
+  console.log(`Renderer listening on ${PORT} (env PORT=${process.env.PORT ?? "undefined"})`);
 });
