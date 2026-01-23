@@ -3,7 +3,16 @@ import { chromium } from "playwright";
 import fs from "fs";
 
 const app = express();
-app.use(express.json({ limit: "5mb" }));
+
+// RAW BODY capture (żeby zobaczyć co naprawdę przyszło)
+app.use(
+  express.json({
+    limit: "5mb",
+    verify: (req, _res, buf) => {
+      req.rawBody = buf?.toString("utf8") || "";
+    },
+  })
+);
 
 const TEMPLATE_HTML_RAW = fs.readFileSync(new URL("./template.html", import.meta.url), "utf8");
 
@@ -15,21 +24,33 @@ async function getBrowser() {
   return browserPromise;
 }
 
-// prosta funkcja do bezpiecznego wstawienia JSON w HTML
 function escapeHtml(s) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+  return String(s).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 app.post("/render", async (req, res) => {
   let rr = req.body;
   if (Array.isArray(rr)) rr = rr[0];
 
-  if (!rr?.template_id) return res.status(400).json({ error: "Missing template_id" });
+  // DIAGNOSTYKA: jeśli brakuje template_id, pokaż co przyszło
+  if (!rr?.template_id) {
+    return res.status(400).json({
+      error: "Missing template_id",
+      debug: {
+        contentType: req.headers["content-type"] || null,
+        bodyType: typeof req.body,
+        isArray: Array.isArray(req.body),
+        bodyKeys: req.body && typeof req.body === "object" ? Object.keys(req.body) : null,
+        rawBodyFirst200: (req.rawBody || "").slice(0, 200),
+      },
+    });
+  }
+
   if (rr.template_id !== "KONTEKST_CAROUSEL_V1_SLIDE_1_HOOK") {
-    return res.status(422).json({ error: "Unsupported template_id" });
+    return res.status(422).json({
+      error: "Unsupported template_id",
+      got: rr.template_id,
+    });
   }
 
   const browser = await getBrowser();
@@ -53,18 +74,16 @@ app.post("/render", async (req, res) => {
   );
 
   try {
-    // 1) Wbuduj RenderRequest w HTML jako <script type="application/json">
     const rrJson = escapeHtml(JSON.stringify(rr));
     const rrScript = `<script id="__RR__" type="application/json">${rrJson}</script>`;
-
-    // Wstawiamy to zaraz po <body> (prosto i deterministycznie)
     const html = TEMPLATE_HTML_RAW.replace("<body>", `<body>\n  ${rrScript}`);
 
     await page.setContent(html, { waitUntil: "domcontentloaded" });
 
-    // 2) Czekamy aż template zasygnalizuje: OK albo ERROR
     await page.waitForFunction(
-      () => window.__RENDERED__ === true || (typeof window.__RENDER_ERROR__ === "string" && window.__RENDER_ERROR__.length > 0),
+      () =>
+        window.__RENDERED__ === true ||
+        (typeof window.__RENDER_ERROR__ === "string" && window.__RENDER_ERROR__.length > 0),
       null,
       { timeout: 8000 }
     );
