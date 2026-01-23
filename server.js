@@ -5,7 +5,7 @@ import fs from "fs";
 const app = express();
 app.use(express.json({ limit: "5mb" }));
 
-const TEMPLATE_HTML = fs.readFileSync(new URL("./template.html", import.meta.url), "utf8");
+const TEMPLATE_HTML_RAW = fs.readFileSync(new URL("./template.html", import.meta.url), "utf8");
 
 app.get("/health", (req, res) => res.status(200).json({ ok: true }));
 
@@ -15,14 +15,19 @@ async function getBrowser() {
   return browserPromise;
 }
 
+// prosta funkcja do bezpiecznego wstawienia JSON w HTML
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
 app.post("/render", async (req, res) => {
   let rr = req.body;
   if (Array.isArray(rr)) rr = rr[0];
 
-  if (!rr?.template_id) {
-    return res.status(400).json({ error: "Missing template_id" });
-  }
-
+  if (!rr?.template_id) return res.status(400).json({ error: "Missing template_id" });
   if (rr.template_id !== "KONTEKST_CAROUSEL_V1_SLIDE_1_HOOK") {
     return res.status(422).json({ error: "Unsupported template_id" });
   }
@@ -48,12 +53,16 @@ app.post("/render", async (req, res) => {
   );
 
   try {
-    await page.addInitScript({
-      content: `window.__RENDER_REQUEST__ = ${JSON.stringify(rr)};`,
-    });
+    // 1) Wbuduj RenderRequest w HTML jako <script type="application/json">
+    const rrJson = escapeHtml(JSON.stringify(rr));
+    const rrScript = `<script id="__RR__" type="application/json">${rrJson}</script>`;
 
-    await page.setContent(TEMPLATE_HTML, { waitUntil: "domcontentloaded" });
+    // Wstawiamy to zaraz po <body> (prosto i deterministycznie)
+    const html = TEMPLATE_HTML_RAW.replace("<body>", `<body>\n  ${rrScript}`);
 
+    await page.setContent(html, { waitUntil: "domcontentloaded" });
+
+    // 2) Czekamy aż template zasygnalizuje: OK albo ERROR
     await page.waitForFunction(
       () => window.__RENDERED__ === true || (typeof window.__RENDER_ERROR__ === "string" && window.__RENDER_ERROR__.length > 0),
       null,
@@ -83,10 +92,7 @@ app.post("/render", async (req, res) => {
   }
 });
 
-// ✅ KLUCZ: Render musi widzieć port z env PORT
 const PORT = Number(process.env.PORT || 10000);
-
-// NIE podajemy hosta — minimalizujemy ryzyko złego bindu
 app.listen(PORT, () => {
   console.log(`Renderer listening on ${PORT} (env PORT=${process.env.PORT ?? "undefined"})`);
 });
