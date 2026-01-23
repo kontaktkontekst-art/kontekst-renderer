@@ -30,20 +30,49 @@ app.post("/render", async (req, res) => {
   const browser = await getBrowser();
   const context = await browser.newContext({
     viewport: { width: 1080, height: 1350 },
-    deviceScaleFactor: 2
+    deviceScaleFactor: 2,
   });
   const page = await context.newPage();
 
+  // Zbieramy logi z przeglądarki, żeby 500 było diagnostyczne
+  const browserLogs = [];
+  const pushLog = (type, msg) => {
+    const line = `[${type}] ${msg}`;
+    browserLogs.push(line);
+    if (browserLogs.length > 200) browserLogs.shift();
+  };
+
+  page.on("console", (msg) => {
+    pushLog(`console.${msg.type()}`, msg.text());
+  });
+  page.on("pageerror", (err) => {
+    pushLog("pageerror", err?.stack || String(err));
+  });
+  page.on("requestfailed", (req) => {
+    pushLog("requestfailed", `${req.method()} ${req.url()} -> ${req.failure()?.errorText || "unknown"}`);
+  });
+
   try {
-    // Wstrzyknięcie danych PRZED załadowaniem HTML
-    await page.addInitScript((data) => {
-      window.__RENDER_REQUEST__ = data;
-    }, rr);
+    // 1) Wstrzyknięcie danych NAJWPROSTSZĄ metodą (bez structured-clone)
+    //    dzięki temu nie ma ryzyka, że addInitScript z argumentem coś „zgubi”.
+    await page.addInitScript({
+      content: `window.__RENDER_REQUEST__ = ${JSON.stringify(rr)};`,
+    });
 
     await page.setContent(TEMPLATE_HTML, { waitUntil: "domcontentloaded" });
 
-    // Poczekaj aż template skończy wstawiać treści (ustawia window.__RENDERED__ = true)
-    await page.waitForFunction(() => window.__RENDERED__ === true, null, { timeout: 8000 });
+    // 2) Czekamy aż template zasygnalizuje: OK albo ERROR
+    await page.waitForFunction(
+      () => window.__RENDERED__ === true || (typeof window.__RENDER_ERROR__ === "string" && window.__RENDER_ERROR__.length > 0),
+      null,
+      { timeout: 8000 }
+    );
+
+    // 3) Jeśli template zgłosił błąd — przerywamy z czytelnym komunikatem
+    const renderError = await page.evaluate(() => window.__RENDER_ERROR__ || "");
+    if (renderError) {
+      throw new Error(`TemplateError: ${renderError}`);
+    }
 
     // Fonts ready (best effort)
     await page.evaluate(async () => {
@@ -58,7 +87,8 @@ app.post("/render", async (req, res) => {
   } catch (e) {
     res.status(500).json({
       error: "Render failed",
-      message: String(e?.message || e)
+      message: String(e?.message || e),
+      browserLogs,
     });
   } finally {
     await page.close().catch(() => {});
