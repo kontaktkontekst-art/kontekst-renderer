@@ -73,15 +73,42 @@
     function readRenderRequest() {
       const el = document.getElementById("__RR__");
       if (!el) return null;
+      try { return JSON.parse(el.textContent || ""); }
+      catch (e) { console.error("Failed to parse __RR__ JSON", e); return null; }
+    }
+
+    function preloadImage(url, timeoutMs = 6000) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        let done = false;
+
+        const finish = (status) => {
+          if (done) return;
+          done = true;
+          resolve(status);
+        };
+
+        const t = setTimeout(() => finish("timeout"), timeoutMs);
+
+        img.onload = () => { clearTimeout(t); finish("loaded"); };
+        img.onerror = () => { clearTimeout(t); finish("error"); };
+        img.src = url;
+      });
+    }
+
+    async function fontsReady(timeoutMs = 2000) {
       try {
-        return JSON.parse(el.textContent || "");
-      } catch (e) {
-        console.error("Failed to parse __RR__ JSON", e);
-        return null;
+        if (!document.fonts?.ready) return "no-font-api";
+        return await Promise.race([
+          document.fonts.ready.then(() => "ready"),
+          new Promise((r) => setTimeout(() => r("timeout"), timeoutMs))
+        ]);
+      } catch {
+        return "error";
       }
     }
 
-    window.addEventListener("DOMContentLoaded", () => {
+    window.addEventListener("DOMContentLoaded", async () => {
       try {
         const rr = readRenderRequest();
         if (!rr) {
@@ -91,19 +118,25 @@
           return;
         }
 
-        document.getElementById("headline").textContent =
-          rr.slots_fill?.headline || "";
+        // teksty
+        document.getElementById("headline").textContent = rr.slots_fill?.headline || "";
+        document.getElementById("brand").textContent = rr.brand_lockup?.handle_text || "";
+        document.getElementById("counter").textContent = `${rr.slide}/${rr.total}`;
 
-        if (rr.slots_fill?.background_image?.url) {
-          document.getElementById("bg").style.backgroundImage =
-            `url("${rr.slots_fill.background_image.url}")`;
+        // tło: najpierw preload, potem ustaw background-image
+        const bgUrl = rr.slots_fill?.background_image?.url;
+        if (bgUrl) {
+          const status = await preloadImage(bgUrl, 6000);
+          if (status === "loaded") {
+            document.getElementById("bg").style.backgroundImage = `url("${bgUrl}")`;
+          } else {
+            console.warn("Background not loaded:", status, bgUrl);
+            // Nie wywalamy renderu — ale przynajmniej mamy deterministykę
+          }
         }
 
-        document.getElementById("brand").textContent =
-          rr.brand_lockup?.handle_text || "";
-
-        document.getElementById("counter").textContent =
-          `${rr.slide}/${rr.total}`;
+        // fonty best-effort
+        await fontsReady(2000);
 
         window.__RENDERED__ = true;
       } catch (err) {
