@@ -4,7 +4,6 @@ import fs from "fs";
 
 const app = express();
 
-// RAW BODY capture (żeby zobaczyć co naprawdę przyszło)
 app.use(
   express.json({
     limit: "5mb",
@@ -32,7 +31,6 @@ app.post("/render", async (req, res) => {
   let rr = req.body;
   if (Array.isArray(rr)) rr = rr[0];
 
-  // DIAGNOSTYKA: jeśli brakuje template_id, pokaż co przyszło
   if (!rr?.template_id) {
     return res.status(400).json({
       error: "Missing template_id",
@@ -40,17 +38,13 @@ app.post("/render", async (req, res) => {
         contentType: req.headers["content-type"] || null,
         bodyType: typeof req.body,
         isArray: Array.isArray(req.body),
-        bodyKeys: req.body && typeof req.body === "object" ? Object.keys(req.body) : null,
         rawBodyFirst200: (req.rawBody || "").slice(0, 200),
       },
     });
   }
 
   if (rr.template_id !== "KONTEKST_CAROUSEL_V1_SLIDE_1_HOOK") {
-    return res.status(422).json({
-      error: "Unsupported template_id",
-      got: rr.template_id,
-    });
+    return res.status(422).json({ error: "Unsupported template_id", got: rr.template_id });
   }
 
   const browser = await getBrowser();
@@ -64,7 +58,7 @@ app.post("/render", async (req, res) => {
   const pushLog = (type, msg) => {
     const line = `[${type}] ${msg}`;
     browserLogs.push(line);
-    if (browserLogs.length > 200) browserLogs.shift();
+    if (browserLogs.length > 300) browserLogs.shift();
   };
 
   page.on("console", (msg) => pushLog(`console.${msg.type()}`, msg.text()));
@@ -85,25 +79,41 @@ app.post("/render", async (req, res) => {
         window.__RENDERED__ === true ||
         (typeof window.__RENDER_ERROR__ === "string" && window.__RENDER_ERROR__.length > 0),
       null,
-      { timeout: 8000 }
+      { timeout: 15000 }
     );
 
     const renderError = await page.evaluate(() => window.__RENDER_ERROR__ || "");
     if (renderError) throw new Error(`TemplateError: ${renderError}`);
 
-    await page.evaluate(async () => {
-      if (document.fonts?.ready) await document.fonts.ready;
-    });
+    // Twarda weryfikacja: czy #canvas istnieje
+    const hasCanvas = await page.evaluate(() => !!document.querySelector("#canvas"));
+    if (!hasCanvas) {
+      const snippet = await page.evaluate(() => document.documentElement?.outerHTML?.slice(0, 1200) || "");
+      throw new Error(`Missing #canvas in DOM. HTML snippet: ${snippet}`);
+    }
 
-    const png = await page.locator("#canvas").screenshot({ type: "png" });
+    const png = await page.locator("#canvas").screenshot({ type: "png", timeout: 60000 });
 
     res.setHeader("Content-Type", "image/png");
     res.status(200).send(png);
   } catch (e) {
+    // fallback: spróbuj zrobić screenshot całej strony (debug)
+    let pagePngB64 = null;
+    try {
+      const full = await page.screenshot({ type: "png", timeout: 10000, fullPage: true });
+      pagePngB64 = full.toString("base64").slice(0, 2000); // tylko fragment, żeby nie walić wielkim JSONem
+    } catch {}
+
     res.status(500).json({
       error: "Render failed",
       message: String(e?.message || e),
       browserLogs,
+      debug: {
+        hasCanvas: await page.evaluate(() => !!document.querySelector("#canvas")).catch(() => null),
+        title: await page.title().catch(() => null),
+        url: page.url(),
+        pageScreenshotB64_first2000: pagePngB64,
+      },
     });
   } finally {
     await page.close().catch(() => {});
