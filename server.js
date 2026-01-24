@@ -52,6 +52,11 @@ app.post("/render", async (req, res) => {
     viewport: { width: 1080, height: 1350 },
     deviceScaleFactor: 2,
   });
+
+  // Ustawiamy jawnie timeouty na sensowne dodatnie wartości
+  context.setDefaultTimeout(60000);
+  context.setDefaultNavigationTimeout(60000);
+
   const page = await context.newPage();
 
   const browserLogs = [];
@@ -79,40 +84,32 @@ app.post("/render", async (req, res) => {
         window.__RENDERED__ === true ||
         (typeof window.__RENDER_ERROR__ === "string" && window.__RENDER_ERROR__.length > 0),
       null,
-      { timeout: 15000 }
+      { timeout: 20000 }
     );
 
     const renderError = await page.evaluate(() => window.__RENDER_ERROR__ || "");
     if (renderError) throw new Error(`TemplateError: ${renderError}`);
 
-    // Twarda weryfikacja: czy #canvas istnieje
-    const hasCanvas = await page.evaluate(() => !!document.querySelector("#canvas"));
-    if (!hasCanvas) {
-      const snippet = await page.evaluate(() => document.documentElement?.outerHTML?.slice(0, 1200) || "");
-      throw new Error(`Missing #canvas in DOM. HTML snippet: ${snippet}`);
-    }
+    // Czekamy aż #canvas będzie w DOM
+    await page.waitForSelector("#canvas", { state: "attached", timeout: 20000 });
 
-    const png = await page.locator("#canvas").screenshot({ type: "png", timeout: 60000 });
+    const el = await page.$("#canvas");
+    if (!el) throw new Error("Missing #canvas element handle");
+
+    // Screenshot przez elementHandle (omija locator timeout bug)
+    const png = await el.screenshot({ type: "png", timeout: 60000 });
 
     res.setHeader("Content-Type", "image/png");
     res.status(200).send(png);
   } catch (e) {
-    // fallback: spróbuj zrobić screenshot całej strony (debug)
-    let pagePngB64 = null;
-    try {
-      const full = await page.screenshot({ type: "png", timeout: 10000, fullPage: true });
-      pagePngB64 = full.toString("base64").slice(0, 2000); // tylko fragment, żeby nie walić wielkim JSONem
-    } catch {}
-
     res.status(500).json({
       error: "Render failed",
       message: String(e?.message || e),
       browserLogs,
       debug: {
-        hasCanvas: await page.evaluate(() => !!document.querySelector("#canvas")).catch(() => null),
-        title: await page.title().catch(() => null),
         url: page.url(),
-        pageScreenshotB64_first2000: pagePngB64,
+        hasCanvas: await page.evaluate(() => !!document.querySelector("#canvas")).catch(() => null),
+        now: Date.now(),
       },
     });
   } finally {
