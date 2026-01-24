@@ -2,67 +2,214 @@
 <html lang="pl">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    html, body { margin:0; padding:0; }
-    body { background:#fff; }
+    :root{
+      --w:1080px;
+      --h:1350px;
 
-    #canvas {
-      position: relative;
-      width: 1080px;
-      height: 1350px;
-      background: #F6F3EE;
-      overflow: hidden;
-      font-family: Arial, sans-serif;
+      --bg:#0b0c0f;
+      --paper:#F6F3EE;
+      --ink:#111111;
+
+      /* “gold” jak w referencjach */
+      --accent:#C8A24A;
+
+      /* safe area */
+      --padX:84px;
+      --padY:96px;
+
+      /* fallback fonts (bez custom fontów na razie) */
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Helvetica Neue", Helvetica, sans-serif;
+      --cond: "Impact", "Arial Black", "Haettenschweiler", "Franklin Gothic Medium", var(--sans);
     }
 
-    .bg {
+    html, body { margin:0; padding:0; background:#fff; }
+    #canvas{
+      position:relative;
+      width:var(--w);
+      height:var(--h);
+      overflow:hidden;
+      background: var(--bg);
+      font-family: var(--sans);
+    }
+
+    /* Background photo */
+    #bg {
       position:absolute;
       inset:0;
       background-size:cover;
       background-position:center;
-      filter: brightness(0.6);
+      transform: scale(1.02);
+      filter: saturate(0.95) contrast(1.05);
     }
 
-    .content {
+    /* Vignette / darken edges */
+    #vignette{
       position:absolute;
       inset:0;
-      padding:96px 84px;
+      background:
+        radial-gradient(1200px 900px at 50% 30%, rgba(0,0,0,0.00) 0%, rgba(0,0,0,0.25) 55%, rgba(0,0,0,0.55) 100%);
+      pointer-events:none;
+    }
+
+    /* Bottom gradient for text legibility (kluczowy element “nie-tandetny”) */
+    #bottomFade{
+      position:absolute;
+      inset:0;
+      background:
+        linear-gradient(to bottom,
+          rgba(0,0,0,0.00) 0%,
+          rgba(0,0,0,0.10) 45%,
+          rgba(0,0,0,0.55) 65%,
+          rgba(0,0,0,0.88) 82%,
+          rgba(0,0,0,0.95) 100%);
+      pointer-events:none;
+    }
+
+    /* Subtle grain (mikrodetal jak w referencjach) */
+    #grain{
+      position:absolute;
+      inset:0;
+      opacity:0.10;
+      mix-blend-mode: overlay;
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
+      pointer-events:none;
+    }
+
+    /* Top / bottom accent lines */
+    .line{
+      position:absolute;
+      left:var(--padX);
+      right:var(--padX);
+      height:2px;
+      background: rgba(200,162,74,0.85);
+    }
+    #lineBottom{ bottom: 220px; }
+    #lineTop{ top: 80px; opacity:0.35; }
+
+    /* Brand mark (centered on line) */
+    #markWrap{
+      position:absolute;
+      left:0; right:0;
+      bottom: 220px;
+      height: 0;
+      display:flex;
+      justify-content:center;
+      pointer-events:none;
+    }
+    #mark{
+      transform: translateY(-18px);
+      width: 54px;
+      height: 54px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color: var(--accent);
+      opacity:0.95;
+    }
+    #mark svg { width:54px; height:54px; }
+
+    /* Content block at bottom */
+    #content{
+      position:absolute;
+      left:var(--padX);
+      right:var(--padX);
+      bottom: 78px;
       display:flex;
       flex-direction:column;
-      justify-content:flex-start;
+      gap: 18px;
     }
 
-    h1 {
-      font-size:84px;
-      line-height:92px;
+    #headline{
       margin:0;
-      color:#111;
-      max-width:900px;
+      font-family: var(--cond);
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: -0.6px;
+      color: #ffffff;
+      text-shadow: 0 6px 22px rgba(0,0,0,0.55);
+      line-height: 1.02;
     }
 
-    .footer {
-      position:absolute;
-      bottom:40px;
-      left:84px;
-      right:84px;
+    /* highlight */
+    .accent{ color: var(--accent); }
+
+    #supporting{
+      font-size: 34px;
+      line-height: 44px;
+      color: rgba(255,255,255,0.86);
+      max-width: 900px;
+    }
+
+    /* Footer row */
+    #footer{
       display:flex;
       justify-content:space-between;
-      font-size:22px;
-      color:#111;
+      align-items:flex-end;
+      font-size: 22px;
+      color: rgba(255,255,255,0.78);
+      margin-top: 10px;
+    }
+
+    /* Swipe hint */
+    #swipe{
+      margin-top: 10px;
+      font-size: 22px;
+      letter-spacing: 0.4px;
+      color: rgba(255,255,255,0.85);
+      display:flex;
+      align-items:center;
+      gap: 12px;
+    }
+    #dots{
+      display:flex;
+      gap: 6px;
+      transform: translateY(1px);
+    }
+    .dot{
+      width:8px; height:8px; border-radius:99px;
+      background: rgba(255,255,255,0.35);
+    }
+    .dot.active{ background: rgba(255,255,255,0.85); }
+
+    /* helper clamp for headline */
+    .clamp{
+      display:-webkit-box;
+      -webkit-box-orient: vertical;
+      overflow:hidden;
     }
   </style>
 </head>
+
 <body>
   <div id="canvas">
-    <div id="bg" class="bg"></div>
+    <div id="bg"></div>
+    <div id="vignette"></div>
+    <div id="bottomFade"></div>
+    <div id="grain"></div>
 
-    <div class="content">
-      <h1 id="headline"></h1>
+    <div id="lineTop" class="line"></div>
+    <div id="lineBottom" class="line"></div>
+
+    <div id="markWrap">
+      <div id="mark"></div>
     </div>
 
-    <div class="footer">
-      <div id="brand"></div>
-      <div id="counter"></div>
+    <div id="content">
+      <h1 id="headline" class="clamp"></h1>
+      <div id="supporting"></div>
+
+      <div id="swipe">
+        <div>SWIPE FOR MORE</div>
+        <div id="dots"></div>
+      </div>
+
+      <div id="footer">
+        <div id="brand"></div>
+        <div id="counter"></div>
+      </div>
     </div>
   </div>
 
@@ -77,71 +224,131 @@
       catch (e) { console.error("Failed to parse __RR__ JSON", e); return null; }
     }
 
-    function preloadImage(url, timeoutMs = 6000) {
+    function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
+
+    function preloadImage(url, timeoutMs = 8000) {
       return new Promise((resolve) => {
         const img = new Image();
         let done = false;
-
-        const finish = (status) => {
-          if (done) return;
-          done = true;
-          resolve(status);
-        };
-
+        const finish = (status) => { if (done) return; done = true; resolve(status); };
         const t = setTimeout(() => finish("timeout"), timeoutMs);
-
         img.onload = () => { clearTimeout(t); finish("loaded"); };
         img.onerror = () => { clearTimeout(t); finish("error"); };
         img.src = url;
       });
     }
 
-    async function fontsReady(timeoutMs = 2000) {
-      try {
-        if (!document.fonts?.ready) return "no-font-api";
-        return await Promise.race([
-          document.fonts.ready.then(() => "ready"),
-          new Promise((r) => setTimeout(() => r("timeout"), timeoutMs))
-        ]);
-      } catch {
-        return "error";
+    function setDots(total, activeIdx){
+      const dots = document.getElementById("dots");
+      dots.innerHTML = "";
+      const n = clamp(Number(total || 5), 3, 7);
+      const a = clamp(Number(activeIdx || 1), 1, n);
+      for(let i=1;i<=n;i++){
+        const d=document.createElement("div");
+        d.className="dot" + (i===a ? " active" : "");
+        dots.appendChild(d);
       }
     }
 
+    function applyClamp(el, lines){
+      el.style.webkitLineClamp = String(lines);
+    }
+
+    function autosizeHeadline(el, text){
+      // Prosty, przewidywalny sizing (jak w referencjach: duże, ale nie wywala)
+      const len = (text || "").length;
+      let size = 96;
+      if (len > 150) size = 66;
+      else if (len > 120) size = 74;
+      else if (len > 95) size = 82;
+      else if (len > 70) size = 90;
+
+      size = clamp(size, 64, 100);
+      el.style.fontSize = size + "px";
+      el.style.letterSpacing = (size >= 90 ? "-0.8px" : "-0.4px");
+      applyClamp(el, 4);
+    }
+
+    function buildAccentHeadline(text){
+      // Minimalna heurystyka: jeśli masz myślnik/–, druga część idzie w accent
+      // Dzięki temu Twoje: "… – strach i chciwość …" automatycznie dostanie złoty akcent.
+      const t = (text || "").trim();
+      const split = t.split("–");
+      if (split.length >= 2){
+        const a = split[0].trim();
+        const b = split.slice(1).join("–").trim();
+        return `${escapeHtml(a)} <span class="accent">– ${escapeHtml(b)}</span>`;
+      }
+      return escapeHtml(t);
+    }
+
+    function escapeHtml(s){
+      return String(s)
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#39;");
+    }
+
     window.addEventListener("DOMContentLoaded", async () => {
-      try {
+      try{
         const rr = readRenderRequest();
         if (!rr) {
-          console.error("Missing/invalid RenderRequest (__RR__)");
           window.__RENDER_ERROR__ = "Missing/invalid RenderRequest (__RR__)";
           window.__RENDERED__ = true;
           return;
         }
 
-        // teksty
-        document.getElementById("headline").textContent = rr.slots_fill?.headline || "";
-        document.getElementById("brand").textContent = rr.brand_lockup?.handle_text || "";
-        document.getElementById("counter").textContent = `${rr.slide}/${rr.total}`;
-
-        // tło: najpierw preload, potem ustaw background-image
+        // background
         const bgUrl = rr.slots_fill?.background_image?.url;
-        if (bgUrl) {
-          const status = await preloadImage(bgUrl, 6000);
-          if (status === "loaded") {
+        if (bgUrl){
+          const status = await preloadImage(bgUrl, 8000);
+          if (status === "loaded"){
             document.getElementById("bg").style.backgroundImage = `url("${bgUrl}")`;
           } else {
             console.warn("Background not loaded:", status, bgUrl);
-            // Nie wywalamy renderu — ale przynajmniej mamy deterministykę
           }
         }
 
-        // fonty best-effort
-        await fontsReady(2000);
+        // brand mark (prefer hero svg if present, else simple glyph)
+        const hero = rr.assets?.hero?.data_uri;
+        const mark = document.getElementById("mark");
+        if (hero && hero.startsWith("data:image/svg+xml")){
+          // wstawiamy SVG jako <img> żeby nie bawić się w decode base64 w JS
+          const img = document.createElement("img");
+          img.src = hero;
+          img.style.width = "54px";
+          img.style.height = "54px";
+          img.style.filter = "drop-shadow(0 8px 18px rgba(0,0,0,0.55))";
+          mark.appendChild(img);
+        } else {
+          mark.innerHTML = `<div style="font-family:var(--cond);font-size:34px;color:var(--accent);">K</div>`;
+        }
 
+        // headline
+        const headlineText = rr.slots_fill?.headline || "";
+        const h1 = document.getElementById("headline");
+        h1.innerHTML = buildAccentHeadline(headlineText);
+        autosizeHeadline(h1, headlineText);
+
+        // supporting (opcjonalny, ale zwykle poprawia “premium”)
+        const supporting = rr.slots_fill?.supporting || "";
+        const supEl = document.getElementById("supporting");
+        supEl.textContent = supporting;
+
+        // footer
+        document.getElementById("brand").textContent = rr.brand_lockup?.handle_text || "";
+        document.getElementById("counter").textContent = `${rr.slide}/${rr.total}`;
+
+        // dots
+        setDots(rr.total || 5, rr.slide || 1);
+
+        // done
         window.__RENDERED__ = true;
-      } catch (err) {
-        console.error("Template exception", err);
-        window.__RENDER_ERROR__ = String(err?.message || err);
+      } catch(e){
+        console.error(e);
+        window.__RENDER_ERROR__ = String(e?.message || e);
         window.__RENDERED__ = true;
       }
     });
