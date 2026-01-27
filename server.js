@@ -16,6 +16,17 @@ const DEFAULT_TIMEOUT_MS = Number(process.env.DEFAULT_TIMEOUT_MS || 60000);
 const RENDER_SIGNAL_TIMEOUT_MS = Number(process.env.RENDER_SIGNAL_TIMEOUT_MS || 20000);
 
 // =====================
+// Supported templates
+// =====================
+const SUPPORTED_TEMPLATES = [
+  "KONTEKST_CAROUSEL_V1_SLIDE_1_HOOK",
+  "KONTEKST_CAROUSEL_V1_SLIDE_2_NUMBERS",
+  "KONTEKST_CAROUSEL_V1_SLIDE_3_MECHANISM",
+  "KONTEKST_CAROUSEL_V1_SLIDE_4_RULES",
+  "KONTEKST_CAROUSEL_V1_SLIDE_5_MYTH_TRUTH",
+];
+
+// =====================
 // Middleware
 // =====================
 app.use(
@@ -33,6 +44,9 @@ const TEMPLATE_HTML_RAW = fs.readFileSync(
 );
 
 app.get("/health", (_req, res) => res.status(200).json({ ok: true }));
+app.get("/templates", (_req, res) =>
+  res.status(200).json({ supported: SUPPORTED_TEMPLATES })
+);
 
 // =====================
 // Browser singleton
@@ -133,27 +147,20 @@ app.post("/render", async (req, res) => {
           bodyType: typeof req.body,
           isArray: Array.isArray(req.body),
           rawBodyFirst200: (req.rawBody || "").slice(0, 200),
-          keysTopLevel: req.body && typeof req.body === "object" ? Object.keys(req.body) : null,
+          keysTopLevel:
+            req.body && typeof req.body === "object" ? Object.keys(req.body) : null,
         },
       });
     }
 
-const SUPPORTED = [
-  "KONTEKST_CAROUSEL_V1_SLIDE_1_HOOK",
-  "KONTEKST_CAROUSEL_V1_SLIDE_2_NUMBERS",
-  "KONTEKST_CAROUSEL_V1_SLIDE_3_MECHANISM",
-  "KONTEKST_CAROUSEL_V1_SLIDE_4_RULES",
-  "KONTEKST_CAROUSEL_V1_SLIDE_5_MYTH_TRUTH",
-];
-
-if (!SUPPORTED.includes(templateId)) {
-  return res.status(422).json({
-    error: "Unsupported template_id",
-    got: templateId,
-    supported: SUPPORTED,
-  });
-}
-
+    // Validate supported templates
+    if (!SUPPORTED_TEMPLATES.includes(templateId)) {
+      return res.status(422).json({
+        error: "Unsupported template_id",
+        got: templateId,
+        supported: SUPPORTED_TEMPLATES,
+      });
+    }
 
     const browser = await getBrowser();
 
@@ -188,7 +195,8 @@ if (!SUPPORTED.includes(templateId)) {
     await page.waitForFunction(
       () =>
         window.__RENDERED__ === true ||
-        (typeof window.__RENDER_ERROR__ === "string" && window.__RENDER_ERROR__.length > 0),
+        (typeof window.__RENDER_ERROR__ === "string" &&
+          window.__RENDER_ERROR__.length > 0),
       null,
       { timeout: RENDER_SIGNAL_TIMEOUT_MS }
     );
@@ -197,7 +205,10 @@ if (!SUPPORTED.includes(templateId)) {
     if (renderError) throw new Error(`TemplateError: ${renderError}`);
 
     // Ensure canvas exists
-    await page.waitForSelector("#canvas", { state: "attached", timeout: RENDER_SIGNAL_TIMEOUT_MS });
+    await page.waitForSelector("#canvas", {
+      state: "attached",
+      timeout: RENDER_SIGNAL_TIMEOUT_MS,
+    });
 
     const el = await page.$("#canvas");
     if (!el) throw new Error("Missing #canvas element handle");
