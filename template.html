@@ -12,7 +12,7 @@
       --paper:#F6F3EE;
       --ink:#111111;
 
-      /* “gold” jak w referencjach */
+      /* domyślny accent (nadpisujemy z rr.palette.accent jeśli jest) */
       --accent:#C8A24A;
 
       /* safe area */
@@ -53,7 +53,7 @@
       pointer-events:none;
     }
 
-    /* Bottom gradient for text legibility (kluczowy element “nie-tandetny”) */
+    /* Bottom gradient for text legibility */
     #bottomFade{
       position:absolute;
       inset:0;
@@ -67,7 +67,7 @@
       pointer-events:none;
     }
 
-    /* Subtle grain (mikrodetal jak w referencjach) */
+    /* Subtle grain */
     #grain{
       position:absolute;
       inset:0;
@@ -133,7 +133,6 @@
       line-height: 1.02;
     }
 
-    /* highlight */
     .accent{ color: var(--accent); }
 
     #supporting{
@@ -141,6 +140,7 @@
       line-height: 44px;
       color: rgba(255,255,255,0.86);
       max-width: 900px;
+      white-space: pre-line; /* ważne: rules / myth-truth */
     }
 
     /* Footer row */
@@ -255,7 +255,6 @@
     }
 
     function autosizeHeadline(el, text){
-      // Prosty, przewidywalny sizing (jak w referencjach: duże, ale nie wywala)
       const len = (text || "").length;
       let size = 96;
       if (len > 150) size = 66;
@@ -270,8 +269,6 @@
     }
 
     function buildAccentHeadline(text){
-      // Minimalna heurystyka: jeśli masz myślnik/–, druga część idzie w accent
-      // Dzięki temu Twoje: "… – strach i chciwość …" automatycznie dostanie złoty akcent.
       const t = (text || "").trim();
       const split = t.split("–");
       if (split.length >= 2){
@@ -291,6 +288,48 @@
         .replaceAll("'","&#39;");
     }
 
+    function pickMarkSvg(rr){
+      const a = rr.assets || {};
+      return (
+        a.hero?.data_uri ||
+        a.numbers?.data_uri ||
+        a.panel_left?.data_uri ||
+        a.panel_right?.data_uri ||
+        a.rules?.data_uri ||
+        a.myth_truth?.data_uri ||
+        ""
+      );
+    }
+
+    function computeSupporting(rr){
+      const tid = rr.template_id || "";
+      const sf = rr.slots_fill || {};
+
+      if (tid === "KONTEKST_CAROUSEL_V1_SLIDE_2_NUMBERS") {
+        return [sf.number_block_left, sf.number_block_right].filter(Boolean).join(" ");
+      }
+
+      if (tid === "KONTEKST_CAROUSEL_V1_SLIDE_3_MECHANISM") {
+        const left = [sf.panel_left_title, sf.panel_left_body].filter(Boolean).join(": ");
+        const right = [sf.panel_right_title, sf.panel_right_body].filter(Boolean).join(": ");
+        return [left, right].filter(Boolean).join("  •  ");
+      }
+
+      if (tid === "KONTEKST_CAROUSEL_V1_SLIDE_4_RULES") {
+        const rules = Array.isArray(sf.rules) ? sf.rules : [];
+        return rules.filter(Boolean).map((r) => `• ${r}`).join("\n");
+      }
+
+      if (tid === "KONTEKST_CAROUSEL_V1_SLIDE_5_MYTH_TRUTH") {
+        const myth = sf.myth_text ? `MIT: ${sf.myth_text}` : "";
+        const truth = sf.truth_text ? `PRAWDA: ${sf.truth_text}` : "";
+        return [myth, truth].filter(Boolean).join("\n\n");
+      }
+
+      // SLIDE_1_HOOK i fallback:
+      return sf.supporting || "";
+    }
+
     window.addEventListener("DOMContentLoaded", async () => {
       try{
         const rr = readRenderRequest();
@@ -298,6 +337,12 @@
           window.__RENDER_ERROR__ = "Missing/invalid RenderRequest (__RR__)";
           window.__RENDERED__ = true;
           return;
+        }
+
+        // palette accent -> CSS var
+        const accent = rr.palette?.accent;
+        if (accent) {
+          document.documentElement.style.setProperty("--accent", accent);
         }
 
         // background
@@ -311,13 +356,12 @@
           }
         }
 
-        // brand mark (prefer hero svg if present, else simple glyph)
-        const hero = rr.assets?.hero?.data_uri;
+        // mark svg (pick first available)
         const mark = document.getElementById("mark");
-        if (hero && hero.startsWith("data:image/svg+xml")){
-          // wstawiamy SVG jako <img> żeby nie bawić się w decode base64 w JS
+        const svg = pickMarkSvg(rr);
+        if (svg && svg.startsWith("data:image/svg+xml")) {
           const img = document.createElement("img");
-          img.src = hero;
+          img.src = svg;
           img.style.width = "54px";
           img.style.height = "54px";
           img.style.filter = "drop-shadow(0 8px 18px rgba(0,0,0,0.55))";
@@ -332,10 +376,9 @@
         h1.innerHTML = buildAccentHeadline(headlineText);
         autosizeHeadline(h1, headlineText);
 
-        // supporting (opcjonalny, ale zwykle poprawia “premium”)
-        const supporting = rr.slots_fill?.supporting || "";
+        // supporting (template-aware)
         const supEl = document.getElementById("supporting");
-        supEl.textContent = supporting;
+        supEl.textContent = computeSupporting(rr);
 
         // footer
         document.getElementById("brand").textContent = rr.brand_lockup?.handle_text || "";
