@@ -138,14 +138,22 @@ app.post("/render", async (req, res) => {
       });
     }
 
-    // Validate supported templates (expand here when you add more)
-    if (templateId !== "KONTEKST_CAROUSEL_V1_SLIDE_1_HOOK") {
-      return res.status(422).json({
-        error: "Unsupported template_id",
-        got: templateId,
-        supported: ["KONTEKST_CAROUSEL_V1_SLIDE_1_HOOK"],
-      });
-    }
+const SUPPORTED = [
+  "KONTEKST_CAROUSEL_V1_SLIDE_1_HOOK",
+  "KONTEKST_CAROUSEL_V1_SLIDE_2_NUMBERS",
+  "KONTEKST_CAROUSEL_V1_SLIDE_3_MECHANISM",
+  "KONTEKST_CAROUSEL_V1_SLIDE_4_RULES",
+  "KONTEKST_CAROUSEL_V1_SLIDE_5_MYTH_TRUTH",
+];
+
+if (!SUPPORTED.includes(templateId)) {
+  return res.status(422).json({
+    error: "Unsupported template_id",
+    got: templateId,
+    supported: SUPPORTED,
+  });
+}
+
 
     const browser = await getBrowser();
 
